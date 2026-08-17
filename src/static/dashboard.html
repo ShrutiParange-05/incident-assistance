@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Incident Dashboard</title>
+<style>
+  :root { --bg:#0f1117; --card:#171923; --text:#e5e7eb; --muted:#9ca3af;
+          --low:#22c55e; --medium:#eab308; --high:#f97316; --critical:#ef4444; --accent:#6366f1; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 20px 0; }
+  .card { background: var(--card); border-radius: 10px; padding: 16px; }
+  .card .num { font-size: 28px; font-weight: 700; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262a36; }
+  th { color: var(--muted); font-weight: 500; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #0f1117; }
+  .Low { background: var(--low); } .Medium { background: var(--medium); }
+  .High { background: var(--high); } .Critical { background: var(--critical); }
+  .section-title { margin: 24px 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  #error { color: var(--critical); display: none; }
+</style>
+</head>
+<body>
+  <h1>🩺 Incident Dashboard</h1>
+  <p class="sub">Live view of classified incidents and GenAI recommendations</p>
+  <p id="error"></p>
+
+  <div class="grid" id="summary-cards"></div>
+
+  <div class="section-title">By Severity</div>
+  <div class="grid" id="severity-cards"></div>
+
+  <div class="section-title">Recent Incidents</div>
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Service</th><th>Error Type</th><th>Severity</th><th>Recommended Action</th></tr>
+    </thead>
+    <tbody id="recent-body"></tbody>
+  </table>
+
+  <script>
+    async function loadSummary() {
+      try {
+        const res = await fetch('/dashboard/summary');
+        if (!res.ok) throw new Error('Request failed: ' + res.status);
+        const data = await res.json();
+        render(data);
+      } catch (e) {
+        const el = document.getElementById('error');
+        el.style.display = 'block';
+        el.textContent = 'Could not load dashboard data: ' + e.message;
+      }
+    }
+
+    function render(data) {
+      document.getElementById('summary-cards').innerHTML = `
+        <div class="card"><div class="num">${data.total_incidents}</div><div class="label">Total Incidents</div></div>
+        <div class="card"><div class="num">${Object.keys(data.by_service).length}</div><div class="label">Services Affected</div></div>
+        <div class="card"><div class="num">${Object.keys(data.by_error_type).length}</div><div class="label">Distinct Error Types</div></div>
+      `;
+
+      const sevOrder = ['Critical', 'High', 'Medium', 'Low'];
+      document.getElementById('severity-cards').innerHTML = sevOrder.map(sev => `
+        <div class="card">
+          <div class="num">${data.by_severity[sev] || 0}</div>
+          <div class="label"><span class="badge ${sev}">${sev}</span></div>
+        </div>
+      `).join('');
+
+      document.getElementById('recent-body').innerHTML = data.recent.map(i => `
+        <tr>
+          <td>${new Date(i.created_at).toLocaleString()}</td>
+          <td>${i.service}</td>
+          <td>${i.error_type}</td>
+          <td><span class="badge ${i.severity}">${i.severity}</span></td>
+          <td>${i.recommended_action}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="5">No incidents yet — POST to /incidents to create one.</td></tr>';
+    }
+
+    loadSummary();
+    setInterval(loadSummary, 10000); // refresh every 10s
+  </script>
+</body>
+</html>
